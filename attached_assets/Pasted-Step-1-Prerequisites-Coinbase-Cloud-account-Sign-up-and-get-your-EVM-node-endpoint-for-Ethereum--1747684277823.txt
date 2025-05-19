@@ -1,0 +1,127 @@
+Step 1: Prerequisites
+Coinbase Cloud account: Sign up and get your EVM node endpoint (for Ethereum, Base, etc.):
+Coinbase Cloud Node
+
+Replit account: https://replit.com/
+
+Basic Python knowledge (or JS, but here we'll use Python for simplicity)
+
+Step 2: Create Your Replit Project
+Go to https://replit.com/ and create a new Python project.
+
+In the Packages tab, search for and add:
+
+web3
+
+flask (optional, for making a web interface)
+
+pandas (for data manipulation)
+
+Step 3: Set Up Coinbase Cloud Node Connection
+Replace "YOUR_COINBASE_CLOUD_NODE_URL" with your actual endpoint.
+
+python
+Copy
+Edit
+from web3 import Web3
+
+COINBASE_CLOUD_NODE = "YOUR_COINBASE_CLOUD_NODE_URL"  # e.g. https://mainnet.infura.io/v3/...
+
+w3 = Web3(Web3.HTTPProvider(COINBASE_CLOUD_NODE))
+
+# Check connection
+print("Connected:", w3.isConnected())
+Step 4: Fetch On-Chain Data Points
+A. Get ETH Balance
+python
+Copy
+Edit
+address = "0x..."  # target wallet or exchange address
+balance = w3.eth.get_balance(address)
+print("ETH Balance:", w3.fromWei(balance, 'ether'))
+B. Get ERC-20 Token Balance (e.g. USDC)
+python
+Copy
+Edit
+USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+ERC20_ABI = '''
+[{"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]
+'''
+usdc = w3.eth.contract(address=USDC_ADDRESS, abi=ERC20_ABI)
+usdc_balance = usdc.functions.balanceOf(address).call()
+print("USDC Balance:", usdc_balance / 1e6)
+C. Fetch Inflow/Outflow for a Token
+python
+Copy
+Edit
+# Event signature for ERC20 Transfer
+from_block = w3.eth.block_number - 5000  # Adjust for your needs
+to_block = w3.eth.block_number
+
+inflow_filter = usdc.events.Transfer.createFilter(
+    fromBlock=from_block, toBlock=to_block, argument_filters={'to': address})
+inflow = sum(e['args']['value'] for e in inflow_filter.get_all_entries())
+
+outflow_filter = usdc.events.Transfer.createFilter(
+    fromBlock=from_block, toBlock=to_block, argument_filters={'from': address})
+outflow = sum(e['args']['value'] for e in outflow_filter.get_all_entries())
+
+print("Inflow USDC:", inflow / 1e6)
+print("Outflow USDC:", outflow / 1e6)
+D. Get Transaction History
+python
+Copy
+Edit
+# Use an API like Etherscan, Covalent, or Coinbase Cloud Indexer (not supported in basic node API)
+# For Node API: you need to scan all blocks for transactions involving the address (resource intensive!)
+E. Fetch NFT Holdings
+python
+Copy
+Edit
+# Use OpenSea API, Alchemy NFT API, or fetch via contract calls for ERC-721/ERC-1155 tokens.
+Step 5: Make It a Web App (Optional)
+Here's a minimal Flask app for your Replit project:
+
+python
+Copy
+Edit
+from flask import Flask, request, render_template_string
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    eth_balance = w3.eth.get_balance(address)
+    eth_balance = w3.fromWei(eth_balance, 'ether')
+    return render_template_string("""
+        <h1>On-Chain Data Dashboard</h1>
+        <p>ETH Balance: {{ eth_balance }} </p>
+        <!-- Add more stats here -->
+    """, eth_balance=eth_balance)
+
+app.run(host='0.0.0.0', port=81)
+Step 6: (Optional) Display Charts or Export Data
+Use pandas to analyze/aggregate data.
+
+Use matplotlib or an online dashboard (e.g., Streamlit) for richer visualization.
+
+Step 7: Deploy and Share
+Click "Run" in Replit.
+
+Open your web URL and see your dashboard.
+
+Limitations/Next Steps
+Free node endpoints have limits (requests per second, block range, etc.).
+
+For full transaction history, use an Indexer API (Coinbase Cloud Indexer, Covalent, or Etherscan API).
+
+For DeFi/NFT analytics, you may want to integrate more APIs or expand your pipeline.
+
+Summary Table of What You Can Get:
+Data Point	Source (Coinbase Node API)	How (Code/Service)
+ETH balance	Node API	eth_getBalance
+Token balance	Node API + contract	balanceOf
+Inflow/outflow	Node API + logs	ERC20 Transfer logs
+Transaction history	Indexer API	3rd-party, not direct
+NFT holdings	Indexer API/3rd-party	OpenSea, Alchemy, etc.
+Block data	Node API	eth_getBlockByNumber
