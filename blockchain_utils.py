@@ -6,12 +6,17 @@ import datetime
 import time
 import numpy as np
 import logging
+import concurrent.futures
+import threading
 
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+# Thread-local storage for Web3 connections
+thread_local = threading.local()
 
 def connect_to_node(node_url=None):
     """
@@ -415,82 +420,118 @@ def get_defi_indicators(w3, blocks_back=1000):
         logging.error(f"Error getting DeFi indicators: {str(e)}")
         raise Exception(f"Error getting DeFi indicators: {str(e)}")
         
+def get_thread_w3(node_url):
+    """Thread-local Web3 instance to avoid connection issues in parallel processing"""
+    if not hasattr(thread_local, "w3"):
+        thread_local.w3 = Web3(Web3.HTTPProvider(node_url))
+    return thread_local.w3
+
+def process_block_for_addresses(block_info):
+    """Process a single block to extract unique addresses"""
+    block_num, node_url, day_str = block_info
+    
+    try:
+        # Get thread-local Web3 instance
+        w3 = get_thread_w3(node_url)
+        
+        # Process block
+        block = w3.eth.get_block(block_num)
+        timestamp = datetime.datetime.fromtimestamp(block['timestamp'])
+        block_day = timestamp.date().strftime('%Y-%m-%d')
+        
+        # Skip if block is from a different day than expected
+        if block_day != day_str:
+            return (day_str, set())
+            
+        # Extract addresses from this block - sample just some transactions for efficiency
+        addresses = set()
+        tx_sample = min(10, len(block['transactions']))  # Sample up to 10 txs per block
+        
+        for tx_hash in block['transactions'][:tx_sample]:
+            try:
+                tx = w3.eth.get_transaction(tx_hash)
+                if 'from' in tx and tx['from']:
+                    addresses.add(tx['from'])
+                if 'to' in tx and tx['to']:
+                    addresses.add(tx['to'])
+            except Exception:
+                continue
+                
+        return (day_str, addresses)
+    except Exception as e:
+        logging.debug(f"Error processing block {block_num}: {str(e)}")
+        return (day_str, set())
+
 def get_address_activity_trends(w3, days=7):
     """
-    Analyze active addresses trends over time using a highly optimized approach
+    Analyze active addresses trends over time using parallel processing
     """
     try:
         logging.info(f"Starting address activity analysis for the last {days} days")
         start_time = time.time()
         
+        # Store original node URL for thread-local connections
+        node_url = w3.provider.endpoint_uri if hasattr(w3.provider, 'endpoint_uri') else None
+        if not node_url:
+            raise ValueError("Unable to determine node URL for parallel processing")
+            
         latest_block = w3.eth.block_number
         
         # Estimate blocks per day (avg 13.5 seconds per block)
         blocks_per_day = int(24 * 60 * 60 / 13.5)
-        total_blocks = blocks_per_day * days
         
-        logging.info(f"Estimated blocks per day: {blocks_per_day}, total blocks to analyze: {total_blocks}")
-        
-        # For daily metrics, we'll create a simulated dataset based on a very small sample
-        # Instead of processing thousands of blocks, we'll process an extremely small representative sample
-        samples_per_day = 5  # Take just 5 sample blocks per day
-        total_samples = samples_per_day * days
-        
-        # Calculate dates list from today backward
+        # Calculate date ranges
         today = datetime.datetime.now().date()
         date_list = [(today - datetime.timedelta(days=d)).strftime('%Y-%m-%d') for d in range(days)]
         
-        logging.info(f"Analyzing {total_samples} sample blocks for {days} days")
+        # Prepare parallel processing
+        max_workers = min(20, os.cpu_count() * 5)  # Limit concurrent connections
+        logging.info(f"Using {max_workers} parallel workers")
         
-        # Create simulated pattern of address growth
-        # These patterns are based on typical blockchain activity patterns
-        # When connected to a real node, we would do actual sampling
+        # For each day, we'll sample blocks but do it in parallel
+        samples_per_day = 100  # Process 100 blocks per day in parallel instead of all 6400
         
-        # For this simulation, we'll estimate each day's unique address count
-        # by sampling just a few blocks and extrapolating
+        # Track all unique addresses by day
+        daily_addresses = {day: set() for day in date_list}
+        blocks_processed = 0
         
-        # Track unique addresses by day - will be populated with representative data
-        address_counts = {}
-        
-        # Sample blocks - greatly reduced number for faster performance
-        current_time = time.time()
+        # Process each day in the range
         for day_idx, day_str in enumerate(date_list):
-            # Find a representative block for this day
-            if day_idx == 0:  # Today - use recent blocks
-                sample_block_range = (latest_block - 100, latest_block)
-            else:  # Previous days - estimate blocks
-                days_ago = day_idx
-                approx_blocks_ago = days_ago * blocks_per_day
-                sample_block_range = (latest_block - approx_blocks_ago - 100, latest_block - approx_blocks_ago)
+            day_start = time.time()
             
-            # Process just a single representative block per day for speed
-            # This is an extreme optimization for dashboarding purposes
-            try:
-                # Get a random block in the day's range
-                target_block = sample_block_range[0] + (sample_block_range[1] - sample_block_range[0]) // 2
+            # Calculate block range for this day
+            if day_idx == 0:  # Today
+                end_block = latest_block
+                start_block = max(0, end_block - blocks_per_day)
+            else:
+                end_block = latest_block - (day_idx * blocks_per_day)
+                start_block = max(0, end_block - blocks_per_day)
                 
-                # Process the representative block to get its transaction count
-                block = w3.eth.get_block(target_block)
-                tx_count = len(block['transactions'])
+            logging.info(f"Day {day_str}: analyzing blocks {start_block} to {end_block}")
+            
+            # Determine step size to get the desired number of samples
+            step = max(1, (end_block - start_block) // samples_per_day)
+            
+            # Create block batches for parallel processing
+            block_batch = [(block_num, node_url, day_str) 
+                          for block_num in range(start_block, end_block + 1, step)]
+            
+            # Process blocks in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                results = list(executor.map(process_block_for_addresses, block_batch))
                 
-                # We'll estimate the active addresses based on the tx count
-                # This greatly speeds up processing while still providing a useful estimate
-                estimated_addresses = tx_count * 1.5  # Each tx involves ~1.5 unique addresses on average
-                address_counts[day_str] = int(estimated_addresses * 100)  # Scale for total daily activity
-                
-                logging.info(f"Day {day_str}: estimated {address_counts[day_str]} active addresses from block {target_block}")
-            except Exception as e:
-                logging.error(f"Error processing sample for day {day_str}: {str(e)}")
-                # Provide a fallback estimate based on adjacent days or defaults
-                if day_idx > 0 and day_str in address_counts:
-                    address_counts[day_str] = address_counts[date_list[day_idx-1]] * 0.95  # Slight decrease from previous day
-                else:
-                    address_counts[day_str] = 10000  # Default fallback value
+                # Aggregate results
+                for day, addresses in results:
+                    daily_addresses[day].update(addresses)
+                    blocks_processed += 1
+            
+            logging.info(f"Day {day_str}: processed ~{len(block_batch)} blocks in {time.time() - day_start:.2f} seconds")
+            logging.info(f"Day {day_str}: found {len(daily_addresses[day_str])} unique addresses")
         
-        processing_time = time.time() - current_time
-        logging.info(f"Processed samples in {processing_time:.2f} seconds")
+        # Convert sets to counts
+        address_counts = {day: len(addresses) for day, addresses in daily_addresses.items()}
         
-        # Get sorted dates and counts
+        # Get sorted dates
         dates = sorted(address_counts.keys())
         counts = [address_counts[date] for date in dates]
         
@@ -499,8 +540,9 @@ def get_address_activity_trends(w3, days=7):
         if len(counts) > 1 and counts[0] > 0:
             growth_rate = ((counts[-1] - counts[0]) / counts[0] * 100)
             
-        logging.info(f"Address activity analysis completed, generated data for {len(dates)} days")
-        logging.info(f"Total processing time: {time.time() - start_time:.2f} seconds")
+        total_time = time.time() - start_time
+        logging.info(f"Processed {blocks_processed} blocks in {total_time:.2f} seconds with parallel processing")
+        logging.info(f"Address activity analysis completed, found activity across {len(dates)} days")
             
         return {
             'daily_active_addresses': address_counts,
