@@ -42,11 +42,11 @@ def generate_blockchain_insights(blockchain_data, chain_id=None):
                     Analyze the provided blockchain data and generate insights about market trends, network health, and potential future developments.
                     Be specific, data-driven, and concise. Provide clear narrative explanations and potential implications.
                     Focus on identifying patterns that might precede market movements.
-                    Organize your response in clear sections with bullet points."""
+                    Organize your response in JSON format with clear sections for summary, market_trends, network_health, key_indicators, and recommendations."""
                 },
                 {
                     "role": "user",
-                    "content": f"Please analyze this blockchain data and provide insights about what it suggests for future trends:\n\n{formatted_data}"
+                    "content": f"Please analyze this blockchain data and provide insights in JSON format about what it suggests for future trends. Include 'json' in your response:\n\n{formatted_data}"
                 }
             ],
             response_format={"type": "json_object"},
@@ -55,9 +55,21 @@ def generate_blockchain_insights(blockchain_data, chain_id=None):
         )
         
         # Parse and return the insights
-        insights = json.loads(response.choices[0].message.content)
-        
-        return insights
+        content = response.choices[0].message.content
+        if content is not None:
+            try:
+                insights = json.loads(content)
+                return insights
+            except json.JSONDecodeError:
+                return {
+                    "error": "Failed to parse AI response as JSON",
+                    "message": "The AI response was not in valid JSON format. Please try again."
+                }
+        else:
+            return {
+                "error": "No content received from AI model",
+                "message": "Please try again with different parameters."
+            }
     
     except Exception as e:
         logging.error(f"Error generating blockchain insights: {str(e)}")
