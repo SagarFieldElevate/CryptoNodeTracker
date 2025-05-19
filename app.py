@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import datetime
 import os
 import numpy as np
+import logging
 from blockchain_utils import (
     connect_to_node, 
     get_eth_balance, 
@@ -50,7 +51,17 @@ with st.sidebar:
     if st.button("Connect to Node"):
         with st.spinner("Connecting to Ethereum node..."):
             try:
+                logging.info(f"Attempting to connect to node with URL: {node_url[:10]}[...]")
+                
+                if not node_url or node_url.strip() == "":
+                    raise ValueError("Node URL is empty. Please enter your Coinbase Cloud node URL.")
+                
                 st.session_state.w3 = connect_to_node(node_url)
+                
+                # Check connection
+                if not st.session_state.w3.is_connected():
+                    raise ConnectionError("Web3 instance created but is_connected() returned False")
+                    
                 st.session_state.connected = True
                 st.success("Connected to Ethereum node!")
                 
@@ -59,10 +70,23 @@ with st.sidebar:
                 chain_name = "Ethereum Mainnet" if chain_id == 1 else f"Chain ID: {chain_id}"
                 latest_block = st.session_state.w3.eth.block_number
                 
+                logging.info(f"Successfully connected to {chain_name} - Latest block: {latest_block}")
+                
                 st.markdown(f"**Network:** {chain_name}")
                 st.markdown(f"**Latest Block:** {latest_block}")
             except Exception as e:
-                st.error(f"Failed to connect: {str(e)}")
+                error_msg = str(e)
+                logging.error(f"Connection error: {error_msg}")
+                
+                # More descriptive error message
+                if "Failed to connect" in error_msg:
+                    error_msg = "Failed to connect to the Ethereum node. Please check your node URL and ensure it's accessible."
+                elif "timeout" in error_msg.lower():
+                    error_msg = "Connection timed out. The node might be experiencing high load or the URL might be incorrect."
+                elif "Invalid provider" in error_msg:
+                    error_msg = "Invalid provider URL. Please ensure the URL is properly formatted and includes the protocol (https://)."
+                
+                st.error(f"Failed to connect: {error_msg}")
                 st.session_state.connected = False
     
     if st.session_state.connected:
