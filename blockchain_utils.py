@@ -523,7 +523,7 @@ def get_address_activity_trends(w3, days=7):
         date_list = [(today - datetime.timedelta(days=d)).strftime('%Y-%m-%d') for d in range(days)]
         
         # Prepare parallel processing
-        max_workers = 200  # Use 200 simultaneous connections as requested
+        max_workers = 2000  # Use 2000 simultaneous connections as requested
         logging.info(f"Using {max_workers} parallel workers")
         
         # Process all blocks with massive parallelism
