@@ -446,6 +446,18 @@ if st.session_state.connected and st.session_state.w3:
                                 st.warning("⚠️ Network is highly congested, which may impact transaction speeds")
                             elif metrics['avg_gas_utilization'] < 50:
                                 st.success("✅ Network has ample capacity for growth")
+                                
+                            # Download data button
+                            st.subheader("Download Raw Data")
+                            
+                            # Download block data as CSV
+                            csv = metrics['block_data'].to_csv(index=False)
+                            st.download_button(
+                                label="Download Network Data (CSV)",
+                                data=csv,
+                                file_name="network_metrics.csv",
+                                mime="text/csv",
+                            )
                     except Exception as e:
                         st.error(f"Error analyzing network metrics: {str(e)}")
         
@@ -513,6 +525,28 @@ if st.session_state.connected and st.session_state.w3:
                                 st.warning("⚠️ DeFi activity is concentrated in fewer protocols, indicating potential centralization risks")
                             else:
                                 st.success("✅ DeFi activity is well distributed across protocols, indicating a healthy ecosystem")
+                                
+                            # Add download data button for DeFi data
+                            st.subheader("Download Raw Data")
+                            
+                            # Download protocol activity data
+                            csv_protocols = df.to_csv(index=False)
+                            st.download_button(
+                                label="Download Protocol Data (CSV)",
+                                data=csv_protocols,
+                                file_name="defi_protocol_data.csv",
+                                mime="text/csv",
+                            )
+                            
+                            # If we have transaction history, add a download button for that too
+                            if not defi_data['transaction_history'].empty:
+                                csv_history = defi_data['transaction_history'].to_csv(index=False)
+                                st.download_button(
+                                    label="Download DeFi Transaction History (CSV)",
+                                    data=csv_history,
+                                    file_name="defi_transaction_history.csv",
+                                    mime="text/csv",
+                                )
                         else:
                             st.info("No DeFi activity detected in the selected block range")
                     except Exception as e:
@@ -579,6 +613,18 @@ if st.session_state.connected and st.session_state.w3:
                                     st.success("✅ Accelerating user growth - a leading indicator of potential ecosystem expansion")
                                 elif second_half_avg < first_half_avg * 0.95:
                                     st.warning("⚠️ Recent decrease in active users - monitor for potential network activity slowdown")
+                                    
+                            # Add download data button for address activity data
+                            st.subheader("Download Raw Data")
+                            
+                            # Download address activity data
+                            csv_addresses = df.to_csv(index=False)
+                            st.download_button(
+                                label="Download Address Activity Data (CSV)",
+                                data=csv_addresses,
+                                file_name="address_activity_data.csv",
+                                mime="text/csv",
+                            )
                         else:
                             st.info("Insufficient address activity data for the selected time period")
                     except Exception as e:
