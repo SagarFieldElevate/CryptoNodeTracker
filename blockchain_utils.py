@@ -302,15 +302,15 @@ def get_defi_indicators(w3, blocks_back=1000):
                         block = w3.eth.get_block(block_num, full_transactions=True)
                         # Count transactions to this DeFi protocol
                         for tx in block['transactions']:
-                            if tx['to'] and tx['to'].lower() == address.lower():
+                            if 'to' in tx and tx['to'] and tx['to'].lower() == address.lower():
                                 tx_count += 1
-                    except:
+                    except Exception as block_error:
                         continue
                         
                 defi_data[protocol] = tx_count
-            except:
+            except Exception as protocol_error:
                 defi_data[protocol] = 0
-                
+        
         # Calculate total DeFi activity
         total_activity = sum(defi_data.values())
         
@@ -318,11 +318,41 @@ def get_defi_indicators(w3, blocks_back=1000):
         market_shares = {}
         for protocol, count in defi_data.items():
             market_shares[protocol] = (count / total_activity * 100) if total_activity > 0 else 0
+        
+        # Generate transaction history data
+        transaction_history = []
+        try:
+            for block_num in range(start_block, latest_block + 1, max(1, (latest_block - start_block) // 10)):
+                try:
+                    block = w3.eth.get_block(block_num)
+                    timestamp = datetime.datetime.fromtimestamp(block['timestamp'])
+                    
+                    # Count DeFi txs in this block (simplified for performance)
+                    defi_tx_count = 0
+                    for protocol, address in defi_addresses.items():
+                        for tx_hash in block['transactions'][:10]:  # Sample up to 10 txs
+                            try:
+                                tx = w3.eth.get_transaction(tx_hash)
+                                if 'to' in tx and tx['to'] and tx['to'].lower() == address.lower():
+                                    defi_tx_count += 1
+                            except:
+                                continue
+                    
+                    transaction_history.append({
+                        'block': block_num,
+                        'timestamp': timestamp,
+                        'defi_transactions': defi_tx_count
+                    })
+                except:
+                    continue
+        except:
+            pass
             
         return {
-            'total_defi_activity': total_activity,
+            'total_activity': total_activity,
             'protocol_activity': defi_data,
-            'market_shares': market_shares
+            'market_shares': market_shares,
+            'transaction_history': pd.DataFrame(transaction_history) if transaction_history else pd.DataFrame()
         }
     except Exception as e:
         raise Exception(f"Error getting DeFi indicators: {str(e)}")
