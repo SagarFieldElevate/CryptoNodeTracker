@@ -6,12 +6,14 @@ import datetime
 import os
 import numpy as np
 import logging
+import json
 from blockchain_utils import (
     connect_to_node, 
     get_network_metrics,
     get_defi_indicators,
     get_address_activity_trends
 )
+from ai_insights import generate_blockchain_insights
 # We no longer need these imports since we removed those sections
 # from token_data import TOKEN_ADDRESSES
 
@@ -107,7 +109,7 @@ if st.session_state.connected and st.session_state.w3:
         
         analysis_type = st.radio(
             "Select Analysis Type",
-            options=["Network Activity", "DeFi Activity", "Address Growth"]
+            options=["Network Activity", "DeFi Activity", "Address Growth", "AI Insights"]
         )
         
         if analysis_type == "Network Activity":
@@ -390,6 +392,156 @@ if st.session_state.connected and st.session_state.w3:
                             st.info("Insufficient address activity data for the selected time period")
                     except Exception as e:
                         st.error(f"Error analyzing address metrics: {str(e)}")
+                        
+        elif analysis_type == "AI Insights":
+            st.subheader("AI-Powered Blockchain Insights")
+            
+            # Check if we have an OpenAI API key
+            openai_api_key = os.environ.get("OPENAI_API_KEY")
+            if not openai_api_key:
+                st.warning("⚠️ OpenAI API key is required for AI-powered insights. Please add your API key to continue.")
+                
+                # Add API key input
+                api_key = st.text_input("OpenAI API Key", type="password", help="Enter your OpenAI API key to enable AI insights")
+                if api_key:
+                    os.environ["OPENAI_API_KEY"] = api_key
+                    st.success("API key set. You can now generate AI insights.")
+                    st.rerun()
+            
+            # Analysis settings
+            st.markdown("### Analysis Settings")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                network_blocks = st.slider("Network Blocks to Analyze", 50, 500, 200)
+            with col2:
+                address_days = st.slider("Address History Days", 1, 14, 3)
+            
+            # Button to generate insights
+            if st.button("Generate AI Insights"):
+                with st.spinner("Gathering blockchain data and generating AI insights..."):
+                    try:
+                        # First collect all the blockchain data from different sources
+                        chain_id = st.session_state.w3.eth.chain_id
+                        
+                        # 1. Get network metrics
+                        network_metrics = get_network_metrics(st.session_state.w3, network_blocks)
+                        
+                        # 2. Get DeFi indicators
+                        defi_metrics = get_defi_indicators(st.session_state.w3, network_blocks * 10)
+                        
+                        # 3. Get address activity trends
+                        address_metrics = get_address_activity_trends(st.session_state.w3, address_days)
+                        
+                        # Compile all data
+                        blockchain_data = {
+                            'timestamp': datetime.datetime.now().isoformat(),
+                            'network_metrics': network_metrics,
+                            'defi_metrics': defi_metrics,
+                            'address_metrics': address_metrics
+                        }
+                        
+                        # Generate insights using AI
+                        st.markdown("### Analyzing On-Chain Data")
+                        st.markdown("Generating AI-powered insights based on collected blockchain data...")
+                        
+                        insights_result = generate_blockchain_insights(blockchain_data, chain_id)
+                        
+                        if 'error' in insights_result:
+                            st.error(insights_result['error'])
+                            st.markdown(insights_result.get('message', ''))
+                        else:
+                            # Display the insights
+                            st.markdown("## AI-Generated Blockchain Insights")
+                            
+                            # Main summary
+                            if 'summary' in insights_result:
+                                st.markdown(f"### Summary\n{insights_result['summary']}")
+                            
+                            # Market trends
+                            if 'market_trends' in insights_result:
+                                st.markdown("### Market Trends")
+                                market_trends = insights_result['market_trends']
+                                
+                                # Handle both list of strings and list of dictionaries
+                                if isinstance(market_trends, list):
+                                    for trend in market_trends:
+                                        if isinstance(trend, dict) and 'sentiment' in trend:
+                                            if trend.get('sentiment') == 'positive':
+                                                st.success(f"✅ {trend.get('insight', '')}")
+                                            elif trend.get('sentiment') == 'negative':
+                                                st.warning(f"⚠️ {trend.get('insight', '')}")
+                                            else:
+                                                st.info(f"ℹ️ {trend.get('insight', '')}")
+                                        else:
+                                            st.markdown(f"- {trend}")
+                                else:
+                                    st.markdown(market_trends)
+                            
+                            # Network health
+                            if 'network_health' in insights_result:
+                                st.markdown("### Network Health")
+                                if isinstance(insights_result['network_health'], list):
+                                    for item in insights_result['network_health']:
+                                        st.markdown(f"- {item}")
+                                else:
+                                    st.markdown(insights_result['network_health'])
+                            
+                            # Key indicators
+                            if 'key_indicators' in insights_result:
+                                st.markdown("### Key Indicators to Watch")
+                                if isinstance(insights_result['key_indicators'], list):
+                                    for item in insights_result['key_indicators']:
+                                        st.markdown(f"- {item}")
+                                else:
+                                    st.markdown(insights_result['key_indicators'])
+                            
+                            # Recommendations
+                            if 'recommendations' in insights_result:
+                                st.markdown("### Strategic Recommendations")
+                                if isinstance(insights_result['recommendations'], list):
+                                    for item in insights_result['recommendations']:
+                                        st.markdown(f"- {item}")
+                                else:
+                                    st.markdown(insights_result['recommendations'])
+                            
+                            # Raw JSON for developers
+                            with st.expander("View Raw AI Analysis"):
+                                st.json(insights_result)
+                            
+                            # Allow downloading the insights
+                            insights_json = json.dumps(insights_result, indent=2)
+                            st.download_button(
+                                label="Download AI Insights (JSON)",
+                                data=insights_json,
+                                file_name="blockchain_ai_insights.json",
+                                mime="application/json",
+                            )
+                    except Exception as e:
+                        st.error(f"Error generating AI insights: {str(e)}")
+            
+            # Documentation about AI insights
+            with st.expander("About AI-Powered Blockchain Insights"):
+                st.markdown("""
+                ### How It Works
+                This feature uses a state-of-the-art Large Language Model (GPT-4o) to analyze on-chain data and generate insights that may help predict future market trends.
+                
+                ### Data Sources
+                - **Network Activity**: Transaction volumes, gas prices, and network congestion
+                - **DeFi Activity**: Protocol usage, market concentration, and activity trends
+                - **Address Growth**: Active addresses and user growth patterns
+                
+                ### Insights Provided
+                - **Market Trends**: Potential directional movements based on on-chain indicators
+                - **Network Health**: Assessment of blockchain scalability and adoption metrics
+                - **Strategic Recommendations**: Actionable suggestions based on the data analysis
+                
+                ### Limitations
+                - AI insights are not financial advice
+                - Analysis is based on available on-chain data and should be used as one of many inputs for decision-making
+                - Past patterns may not predict future results
+                """)
+        
         
         # Documentation
         with st.expander("Understanding Forward-Looking Indicators"):

@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=0.51.0",
     "numpy>=2.2.6",
+    "openai>=1.79.0",
     "pandas>=2.2.3",
     "plotly>=6.1.0",
     "statsmodels>=0.14.4",
