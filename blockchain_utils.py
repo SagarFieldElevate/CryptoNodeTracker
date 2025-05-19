@@ -5,6 +5,13 @@ from token_data import ERC20_ABI, get_token_info
 import datetime
 import time
 import numpy as np
+import logging
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 def connect_to_node(node_url=None):
     """
@@ -185,8 +192,17 @@ def get_network_metrics(w3, blocks_back=100):
     Get network-wide metrics that can be used as forward-looking indicators
     """
     try:
+        logging.info(f"Starting network metrics analysis for {blocks_back} blocks")
+        start_time = time.time()
+        
         latest_block = w3.eth.block_number
         start_block = max(0, latest_block - blocks_back)
+        
+        logging.info(f"Analyzing blocks from {start_block} to {latest_block}")
+        
+        # To speed up processing, sample blocks instead of processing every block
+        sample_size = min(50, blocks_back)  # Limit to 50 sample points
+        step = max(1, blocks_back // sample_size)
         
         # Gather data across blocks
         block_data = []
@@ -194,8 +210,12 @@ def get_network_metrics(w3, blocks_back=100):
         transaction_counts = []
         timestamps = []
         
-        for block_num in range(start_block, latest_block + 1):
+        logging.info(f"Sampling every {step} blocks, total samples: ~{sample_size}")
+        
+        blocks_processed = 0
+        for block_num in range(start_block, latest_block + 1, step):
             try:
+                block_start = time.time()
                 block = w3.eth.get_block(block_num)
                 block_time = datetime.datetime.fromtimestamp(block['timestamp'])
                 
@@ -209,13 +229,16 @@ def get_network_metrics(w3, blocks_back=100):
                 
                 # Get gas price for each transaction in the block
                 if tx_count > 0:
-                    for tx_hash in block['transactions'][:min(5, tx_count)]:  # Sample up to 5 txs per block
+                    # Sample a small number of transactions for gas price
+                    sample_tx = min(3, tx_count)
+                    for tx_hash in block['transactions'][:sample_tx]:
                         try:
                             tx = w3.eth.get_transaction(tx_hash)
                             gas_price = tx.get('gasPrice', 0)
                             if gas_price > 0:
                                 gas_prices.append(w3.from_wei(gas_price, 'gwei'))
-                        except:
+                        except Exception as tx_err:
+                            logging.debug(f"Error getting transaction details: {tx_err}")
                             continue
                 
                 # Store block data
@@ -229,10 +252,17 @@ def get_network_metrics(w3, blocks_back=100):
                 })
                 
                 timestamps.append(block_time)
+                blocks_processed += 1
+                
+                block_time = time.time() - block_start
+                if block_time > 1.0:  # Log slow block processing
+                    logging.warning(f"Block {block_num} processing took {block_time:.2f} seconds")
                 
             except Exception as e:
-                # Skip problematic blocks
+                logging.error(f"Error processing block {block_num}: {str(e)}")
                 continue
+        
+        logging.info(f"Processed {blocks_processed} blocks in {time.time() - start_time:.2f} seconds")
         
         # Create dataframe
         df = pd.DataFrame(block_data)
@@ -261,6 +291,8 @@ def get_network_metrics(w3, blocks_back=100):
         
         avg_block_time = np.mean(block_times) if block_times else 0
         
+        logging.info("Network metrics analysis complete")
+        
         return {
             'avg_gas_price': avg_gas_price,
             'avg_tx_count': avg_tx_count, 
@@ -270,6 +302,7 @@ def get_network_metrics(w3, blocks_back=100):
             'block_data': df
         }
     except Exception as e:
+        logging.error(f"Error getting network metrics: {str(e)}")
         raise Exception(f"Error getting network metrics: {str(e)}")
         
 def get_defi_indicators(w3, blocks_back=1000):
@@ -277,12 +310,17 @@ def get_defi_indicators(w3, blocks_back=1000):
     Get DeFi-specific indicators from common DeFi protocols
     """
     try:
+        logging.info(f"Starting DeFi indicators analysis for the last {blocks_back} blocks")
+        start_time = time.time()
+        
         # This function would connect to various DeFi protocols to get their metrics
         # For demonstration purposes, we'll create simulated data since fetching full transaction
         # data for many blocks can be very resource-intensive and time-consuming
         
         latest_block = w3.eth.block_number
         start_block = max(0, latest_block - blocks_back)
+        
+        logging.info(f"Current block: {latest_block}, analyzing from block {start_block}")
         
         # Sample some popular DeFi contract addresses
         defi_addresses = {
@@ -293,16 +331,35 @@ def get_defi_indicators(w3, blocks_back=1000):
         }
         
         # Sample some recent blocks for demonstration
+        logging.info("Sampling blocks to estimate DeFi activity")
         sample_blocks = []
-        step = max(1, blocks_back // 10)
-        for i in range(10):
+        # Limit number of samples to avoid long processing times
+        num_samples = min(10, blocks_back // 1000 + 1)
+        step = max(1, blocks_back // num_samples)
+        
+        logging.info(f"Will sample {num_samples} blocks with step size {step}")
+        
+        # Sample blocks to get transaction counts
+        for i in range(num_samples):
             block_num = start_block + (i * step)
             if block_num <= latest_block:
                 try:
+                    block_start = time.time()
                     block = w3.eth.get_block(block_num)
                     sample_blocks.append((block_num, len(block['transactions']), block['timestamp']))
-                except:
+                    
+                    block_time = time.time() - block_start
+                    if block_time > 1.0:
+                        logging.warning(f"Block {block_num} retrieval took {block_time:.2f} seconds")
+                except Exception as e:
+                    logging.error(f"Error retrieving block {block_num}: {str(e)}")
                     continue
+        
+        logging.info(f"Successfully sampled {len(sample_blocks)} blocks")
+        
+        if not sample_blocks:
+            logging.warning("No blocks could be sampled, using default values")
+            sample_blocks = [(latest_block, 100, int(time.time()))]  # Default fallback
         
         # Create simulated activity data based on sampled transaction counts
         defi_data = {}
@@ -315,7 +372,10 @@ def get_defi_indicators(w3, blocks_back=1000):
         
         # Calculate sample total transactions
         total_tx_count = sum([tx_count for _, tx_count, _ in sample_blocks])
+        logging.info(f"Total transactions in sampled blocks: {total_tx_count}")
+        
         estimated_defi_tx = total_tx_count * 0.2  # Assume 20% of transactions are DeFi-related
+        logging.info(f"Estimated DeFi transactions: {estimated_defi_tx}")
         
         # Distribute by protocol weight
         for protocol, weight in protocol_weights.items():
@@ -342,6 +402,8 @@ def get_defi_indicators(w3, blocks_back=1000):
                 'timestamp': block_time,
                 'defi_transactions': defi_tx_count
             })
+        
+        logging.info(f"DeFi indicators analysis completed in {time.time() - start_time:.2f} seconds")
             
         return {
             'total_activity': total_activity,
@@ -350,6 +412,7 @@ def get_defi_indicators(w3, blocks_back=1000):
             'transaction_history': pd.DataFrame(transaction_history) if transaction_history else pd.DataFrame()
         }
     except Exception as e:
+        logging.error(f"Error getting DeFi indicators: {str(e)}")
         raise Exception(f"Error getting DeFi indicators: {str(e)}")
         
 def get_address_activity_trends(w3, days=7):
@@ -357,14 +420,20 @@ def get_address_activity_trends(w3, days=7):
     Analyze active addresses trends over time
     """
     try:
+        logging.info(f"Starting address activity analysis for the last {days} days")
+        start_time = time.time()
+        
         latest_block = w3.eth.block_number
         
         # Estimate blocks per day (avg 13.5 seconds per block)
         blocks_per_day = int(24 * 60 * 60 / 13.5)
         total_blocks = blocks_per_day * days
         
+        logging.info(f"Estimated blocks per day: {blocks_per_day}, total blocks to analyze: {total_blocks}")
+        
         # Limit to a reasonable number to avoid timeouts
-        max_blocks = min(5000, total_blocks)
+        # For simulation purposes, severely limit the number of blocks to process
+        max_blocks = min(200, total_blocks)  # Sample at most 200 blocks
         
         # Calculate step size to evenly distribute sampling
         step = max(1, int(total_blocks / max_blocks))
@@ -372,59 +441,72 @@ def get_address_activity_trends(w3, days=7):
         # Start block
         start_block = max(0, latest_block - total_blocks)
         
-        # Track unique addresses
-        active_addresses = set()
-        daily_active = {}
-        current_day = None
+        logging.info(f"Will sample blocks from {start_block} to {latest_block} with step {step}")
         
-        # Sample blocks
+        # Track unique addresses by day
+        daily_active = {}
+        blocks_processed = 0
+        
+        # Sample blocks across the time range
         for block_num in range(start_block, latest_block + 1, step):
             try:
+                block_start = time.time()
                 block = w3.eth.get_block(block_num)
                 timestamp = datetime.datetime.fromtimestamp(block['timestamp'])
-                day = timestamp.date()
+                day_str = timestamp.date().strftime('%Y-%m-%d')
                 
-                if current_day is None:
-                    current_day = day
+                # Initialize empty set for this day if not exists
+                if day_str not in daily_active:
+                    daily_active[day_str] = set()
                     
-                # If we've moved to a new day, record the previous day's data
-                if day != current_day:
-                    daily_active[current_day] = len(active_addresses)
-                    active_addresses = set()  # Reset for new day
-                    current_day = day
+                # Process a sample of transactions from this block
+                tx_sample = min(5, len(block['transactions']))  # Limit to 5 txs per block
                 
-                # For each transaction in the block
-                for tx_hash in block['transactions'][:10]:  # Limit to 10 txs per block for efficiency
+                for tx_hash in block['transactions'][:tx_sample]:
                     try:
                         tx = w3.eth.get_transaction(tx_hash)
-                        if tx['from']:
-                            active_addresses.add(tx['from'])
-                        if tx['to']:
-                            active_addresses.add(tx['to'])
-                    except:
+                        if 'from' in tx and tx['from']:
+                            daily_active[day_str].add(tx['from'])
+                        if 'to' in tx and tx['to']:
+                            daily_active[day_str].add(tx['to'])
+                    except Exception as tx_error:
+                        logging.debug(f"Error processing transaction: {tx_error}")
                         continue
+                
+                blocks_processed += 1
+                
+                # Log if block processing was slow
+                block_time = time.time() - block_start
+                if block_time > 1.0:
+                    logging.warning(f"Block {block_num} took {block_time:.2f} seconds to process")
+                    
             except Exception as e:
-                # Skip problematic blocks
+                logging.error(f"Error processing block {block_num}: {str(e)}")
                 continue
                 
-        # Add the last day
-        if current_day and current_day not in daily_active:
-            daily_active[current_day] = len(active_addresses)
-            
-        # Convert to dataframe
-        dates = sorted(daily_active.keys())
-        address_counts = [daily_active[date] for date in dates]
+        logging.info(f"Processed {blocks_processed} blocks in {time.time() - start_time:.2f} seconds")
+        
+        # Convert sets to counts
+        address_counts = {}
+        for day, addresses in daily_active.items():
+            address_counts[day] = len(addresses)
+        
+        # Get sorted dates
+        dates = sorted(address_counts.keys())
+        counts = [address_counts[date] for date in dates]
         
         # Calculate active address growth
-        if len(address_counts) > 1:
-            growth_rate = ((address_counts[-1] - address_counts[0]) / address_counts[0] * 100) if address_counts[0] > 0 else 0
-        else:
-            growth_rate = 0
+        growth_rate = 0
+        if len(counts) > 1 and counts[0] > 0:
+            growth_rate = ((counts[-1] - counts[0]) / counts[0] * 100)
+            
+        logging.info(f"Address activity analysis completed, found activity across {len(dates)} days")
             
         return {
-            'daily_active_addresses': dict(zip([d.strftime('%Y-%m-%d') for d in dates], address_counts)),
+            'daily_active_addresses': address_counts,
             'active_address_growth': growth_rate,
-            'current_active_addresses': address_counts[-1] if address_counts else 0
+            'current_active_addresses': counts[-1] if counts else 0
         }
     except Exception as e:
+        logging.error(f"Error getting address activity trends: {str(e)}")
         raise Exception(f"Error getting address activity trends: {str(e)}")
