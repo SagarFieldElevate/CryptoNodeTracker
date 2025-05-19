@@ -27,12 +27,34 @@ def connect_to_node(node_url=None):
         
     if not node_url:
         raise ValueError("No Coinbase Cloud node URL provided")
-        
-    w3 = Web3(Web3.HTTPProvider(node_url))
+    
+    logging.info(f"Connecting to node with URL starting with: {node_url[:10]}...")
+    
+    # Create provider with timeout
+    provider = Web3.HTTPProvider(
+        node_url,
+        request_kwargs={'timeout': 30}  # 30 second timeout 
+    )
+    
+    w3 = Web3(provider)
     
     # Check connection
-    if not w3.is_connected():
+    logging.info("Testing connection...")
+    connection_status = w3.is_connected()
+    
+    if not connection_status:
+        logging.error("Connection test failed - is_connected() returned False")
         raise ConnectionError("Failed to connect to the Ethereum node")
+    
+    logging.info("Connection successful!")
+    
+    # Test a basic request
+    try:
+        latest = w3.eth.block_number
+        logging.info(f"Successfully retrieved latest block: {latest}")
+    except Exception as e:
+        logging.error(f"Connected but failed to get block number: {str(e)}")
+        raise ConnectionError(f"Connection established but failed to retrieve data: {str(e)}")
         
     return w3
 
