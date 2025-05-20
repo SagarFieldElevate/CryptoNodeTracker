@@ -220,22 +220,37 @@ def store_network_metrics(network_data, chain_id=None):
                     except:
                         return str(obj)
 
+        # Pre-process any Decimal values before JSON serialization
+        def preprocess_decimal(obj):
+            if isinstance(obj, dict):
+                return {k: preprocess_decimal(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [preprocess_decimal(item) for item in obj]
+            elif isinstance(obj, decimal.Decimal):
+                return float(obj)  # Convert Decimal to float
+            else:
+                return obj
+        
+        # Convert Decimal values to floats before serialization
+        processed_data = preprocess_decimal(serializable_network_data)
+        
         # Try to serialize with our custom encoder
         try:
             # Store the full data as a JSON string using our custom encoder
-            metadata["data_json"] = json.dumps(serializable_network_data, cls=CustomJSONEncoder)
+            metadata["data_json"] = json.dumps(processed_data, cls=CustomJSONEncoder)
         except Exception as e:
             # If still fails, create a simplified version with only basic types
             logging.error(f"Error serializing data to JSON: {str(e)}")
-            simple_data = {
-                "summary": "Data contained complex types that couldn't be serialized",
+            
+            # Create a minimal version with just the main metrics
+            minimal_data = {
                 "timestamp": datetime.now().isoformat(),
-                "metrics": {k: float(v) if isinstance(v, (int, float, decimal.Decimal)) and not 
-                          (isinstance(v, float) and np.isnan(v)) else str(v) 
-                          for k, v in serializable_network_data.items() 
-                          if isinstance(serializable_network_data, dict) and not isinstance(v, (dict, list, np.ndarray))}
+                "avg_tx_count": metadata.get("avg_tx_count", "0"), 
+                "tx_growth_rate": metadata.get("tx_growth_rate", "0"),
+                "avg_gas_price": metadata.get("avg_gas_price", "0"),
+                "note": "Full data could not be serialized"
             }
-            metadata["data_json"] = json.dumps(simple_data)
+            metadata["data_json"] = json.dumps(minimal_data)
         
         # Generate embedding
         embedding = generate_simple_embedding(network_data)
