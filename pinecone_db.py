@@ -220,6 +220,11 @@ def store_ai_insights(insights_data, query_context=None, chain_id=None):
         pc = get_pinecone_client()
         index = get_index(pc)
         
+        # Check if we got a valid index
+        if index is None:
+            logging.error("Could not access Pinecone index, skipping storage")
+            return None
+            
         # Generate a unique ID for this record
         record_id = str(uuid.uuid4())
         
@@ -259,6 +264,11 @@ def store_prediction_data(prediction_data, historical_context=None, chain_id=Non
         pc = get_pinecone_client()
         index = get_index(pc)
         
+        # Check if we got a valid index
+        if index is None:
+            logging.error("Could not access Pinecone index, skipping storage")
+            return None
+            
         # Generate a unique ID for this record
         record_id = str(uuid.uuid4())
         
@@ -298,6 +308,11 @@ def retrieve_recent_records(data_type=None, limit=10):
         pc = get_pinecone_client()
         index = get_index(pc)
         
+        # Check if we got a valid index
+        if index is None:
+            logging.error("Could not access Pinecone index, skipping retrieval")
+            return []
+            
         # For demonstration - we'll query with a random vector
         # In a real app, you would implement a more sophisticated approach
         query_vector = list(np.random.randn(1536))
