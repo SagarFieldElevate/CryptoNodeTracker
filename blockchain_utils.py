@@ -426,7 +426,7 @@ def get_defi_indicators(w3, blocks_back=1000):
             
             transaction_history.append({
                 'block': block_num,
-                'timestamp': block_time,
+                'timestamp': block_time.isoformat(),  # Convert datetime to ISO format string
                 'defi_transactions': defi_tx_count
             })
         
