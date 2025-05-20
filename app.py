@@ -350,7 +350,10 @@ if st.session_state.connected and st.session_state.w3:
                 with st.spinner("Analyzing address activity... (this may take a while)"):
                     try:
                         # Get address activity trends
-                        address_data = get_address_activity_trends(st.session_state.w3, days)
+                        # Limit the number of parallel workers for address analysis
+                        # This is a temporary fix for the thread limit issue
+                        original_max_workers = max(100, 500 // days)  # Reduce number of workers based on days
+                        address_data = get_address_activity_trends(st.session_state.w3, days, max_workers=original_max_workers)
                         
                         # Store in Pinecone vector database
                         chain_id = st.session_state.w3.eth.chain_id
