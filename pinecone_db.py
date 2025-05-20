@@ -5,6 +5,7 @@ import os
 import json
 import uuid
 import logging
+import decimal
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -53,9 +54,14 @@ def make_json_serializable(obj):
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
         
-    # Handle datetime objects
+    # Handle datetime objects and Timestamps
     elif isinstance(obj, (pd.Timestamp, datetime)):
         return obj.isoformat()
+    
+    # Handle Decimal objects explicitly
+    elif isinstance(obj, decimal.Decimal):
+        # Convert Decimal to float safely
+        return float(obj)
         
     # Handle pandas Series
     elif isinstance(obj, pd.Series):
@@ -193,44 +199,43 @@ def store_network_metrics(network_data, chain_id=None):
                     else:
                         metadata[key] = str(value)
         
-        # Clean any NaN values before JSON serialization to prevent errors
-        clean_data = {}
-        if isinstance(serializable_network_data, dict):
-            for k, v in serializable_network_data.items():
-                # Handle NaN values
-                if isinstance(v, float) and (np.isnan(v) if hasattr(np, 'isnan') else False):
-                    clean_data[k] = None
-                # Handle lists with potential NaN values
-                elif isinstance(v, list):
-                    clean_list = []
-                    for item in v:
-                        if isinstance(item, float) and (np.isnan(item) if hasattr(np, 'isnan') else False):
-                            clean_list.append(None)
-                        else:
-                            clean_list.append(item)
-                    clean_data[k] = clean_list
-                # Handle dictionaries with potential NaN values
-                elif isinstance(v, dict):
-                    clean_dict = {}
-                    for sub_k, sub_v in v.items():
-                        if isinstance(sub_v, float) and (np.isnan(sub_v) if hasattr(np, 'isnan') else False):
-                            clean_dict[sub_k] = None
-                        else:
-                            clean_dict[sub_k] = sub_v
-                    clean_data[k] = clean_dict
+        # Create a custom JSON encoder that can handle special types 
+        class CustomJSONEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, (np.ndarray, list)):
+                    return [self.default(item) for item in obj]
+                elif isinstance(obj, (pd.DataFrame, pd.Series)):
+                    return obj.to_dict()
+                elif isinstance(obj, (datetime, pd.Timestamp)):
+                    return obj.isoformat()
+                elif isinstance(obj, decimal.Decimal):
+                    return float(obj)
+                elif isinstance(obj, float) and np.isnan(obj):
+                    return None
+                elif hasattr(obj, 'dtype') and np.__name__ in type(obj).__module__:
+                    return obj.item()
                 else:
-                    clean_data[k] = v
-        else:
-            clean_data = serializable_network_data
-        
-        # Try to serialize with special NaN handling
+                    try:
+                        return super(CustomJSONEncoder, self).default(obj)
+                    except:
+                        return str(obj)
+
+        # Try to serialize with our custom encoder
         try:
-            # Store the full data as a JSON string
-            metadata["data_json"] = json.dumps(clean_data)
+            # Store the full data as a JSON string using our custom encoder
+            metadata["data_json"] = json.dumps(serializable_network_data, cls=CustomJSONEncoder)
         except Exception as e:
-            # If still fails, convert to a simple summary
+            # If still fails, create a simplified version with only basic types
             logging.error(f"Error serializing data to JSON: {str(e)}")
-            metadata["data_json"] = json.dumps({"error": "Data could not be serialized", "keys": list(serializable_network_data.keys()) if isinstance(serializable_network_data, dict) else []})
+            simple_data = {
+                "summary": "Data contained complex types that couldn't be serialized",
+                "timestamp": datetime.now().isoformat(),
+                "metrics": {k: float(v) if isinstance(v, (int, float, decimal.Decimal)) and not 
+                          (isinstance(v, float) and np.isnan(v)) else str(v) 
+                          for k, v in serializable_network_data.items() 
+                          if isinstance(serializable_network_data, dict) and not isinstance(v, (dict, list, np.ndarray))}
+            }
+            metadata["data_json"] = json.dumps(simple_data)
         
         # Generate embedding
         embedding = generate_simple_embedding(network_data)
