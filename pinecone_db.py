@@ -221,10 +221,30 @@ def store_defi_metrics(defi_data, chain_id=None):
             # Handle the DataFrame by converting to a list of dicts
             tx_history = defi_data['transaction_history']
             if isinstance(tx_history, pd.DataFrame):
-                serializable_defi_data['transaction_history'] = tx_history.to_dict(orient='records')
+                # Convert DataFrame to records but handle datetime objects specially
+                records = []
+                for _, row in tx_history.iterrows():
+                    record = {}
+                    for col in tx_history.columns:
+                        value = row[col]
+                        if isinstance(value, (pd.Timestamp, datetime)):
+                            record[col] = value.isoformat()
+                        else:
+                            record[col] = value
+                    records.append(record)
+                serializable_defi_data['transaction_history'] = records
             elif isinstance(tx_history, list):
-                # If it's already a list (post-fix in blockchain_utils.py), use it directly
-                serializable_defi_data['transaction_history'] = tx_history
+                # If it's already a list, convert datetime objects to strings
+                records = []
+                for item in tx_history:
+                    record = {}
+                    for k, v in item.items():
+                        if isinstance(v, (pd.Timestamp, datetime)):
+                            record[k] = v.isoformat()
+                        else:
+                            record[k] = v
+                    records.append(record)
+                serializable_defi_data['transaction_history'] = records
             else:
                 serializable_defi_data['transaction_history'] = []
                 
