@@ -29,11 +29,17 @@ def get_index(pc, index_name="blockchain-analytics"):
         if index_name not in indexes:
             logging.info(f"Creating new Pinecone index: {index_name}")
             
-            # Create a new index
+            # Create a new index with the required server spec
+            from pinecone import ServerlessSpec
+            
             pc.create_index(
                 name=index_name,
                 dimension=1536,
-                metric="cosine"
+                metric="cosine",
+                spec=ServerlessSpec(
+                    cloud="aws",
+                    region="us-west-2"
+                )
             )
             logging.info(f"Successfully created index {index_name}")
         else:
@@ -278,7 +284,11 @@ def retrieve_recent_records(data_type=None, limit=10):
         )
         
         # Return results
-        return results.matches
+        if hasattr(results, 'matches'):
+            return results.matches
+        else:
+            # Handle different response structure
+            return results.get('matches', [])
     
     except Exception as e:
         logging.error(f"Error retrieving records from Pinecone: {str(e)}")
