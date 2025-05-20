@@ -11,6 +11,44 @@ import pandas as pd
 from pinecone import Pinecone
 from sklearn.preprocessing import normalize
 
+def make_json_serializable(obj):
+    """
+    Convert any object to a JSON serializable format.
+    Handles pandas DataFrames, NumPy arrays, datetime objects, and more.
+    
+    Parameters:
+    - obj: Any Python object
+    
+    Returns:
+    - JSON serializable version of the object
+    """
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(item) for item in obj]
+    elif isinstance(obj, pd.DataFrame):
+        return obj.to_dict(orient='records')
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (pd.Timestamp, datetime)):
+        return obj.isoformat()
+    elif hasattr(obj, 'to_dict'):
+        # For any object with to_dict method (like some pandas objects)
+        return make_json_serializable(obj.to_dict())
+    elif hasattr(obj, '__dict__'):
+        # For general objects with attributes
+        return make_json_serializable(obj.__dict__)
+    elif np.isscalar(obj) and np.isnan(obj):
+        # Handle NaN values
+        return None
+    else:
+        # Try direct conversion, if it fails convert to string
+        try:
+            json.dumps(obj)
+            return obj
+        except (TypeError, OverflowError):
+            return str(obj)
+
 # Initialize Pinecone client with API key
 def get_pinecone_client():
     """Get authenticated Pinecone client"""
@@ -93,15 +131,14 @@ def store_network_metrics(network_data, chain_id=None):
         # Generate a unique ID for this record
         record_id = str(uuid.uuid4())
         
-        # Add timestamp and chain info
-        # Convert any pandas DataFrames to dict for JSON serialization
-        serializable_network_data = {}
-        for key, value in network_data.items():
-            if isinstance(value, pd.DataFrame):
-                # Convert any DataFrame to dict
-                serializable_network_data[key] = value.to_dict(orient='records')
-            else:
-                serializable_network_data[key] = value
+        # Convert all data to JSON serializable formats using our utility function
+        serializable_network_data = make_json_serializable(network_data)
+        
+        # Log the keys we're going to store
+        if isinstance(serializable_network_data, dict):
+            logging.info(f"Storing network metrics with keys: {list(serializable_network_data.keys())}")
+        else:
+            logging.info(f"Storing network metrics (type: {type(serializable_network_data)})")
         
         metadata = {
             "timestamp": datetime.now().isoformat(),
@@ -145,15 +182,14 @@ def store_defi_metrics(defi_data, chain_id=None):
         # Generate a unique ID for this record
         record_id = str(uuid.uuid4())
         
-        # Add timestamp and chain info
-        # Deep copy and convert all pandas DataFrames to dict for JSON serialization
-        serializable_defi_data = {}
-        for key, value in defi_data.items():
-            if isinstance(value, pd.DataFrame):
-                # Convert any DataFrame to dict
-                serializable_defi_data[key] = value.to_dict(orient='records')
-            else:
-                serializable_defi_data[key] = value
+        # Convert all data to JSON serializable formats using our utility function
+        serializable_defi_data = make_json_serializable(defi_data)
+        
+        # Log the keys we're going to store
+        if isinstance(serializable_defi_data, dict):
+            logging.info(f"Storing DeFi metrics with keys: {list(serializable_defi_data.keys())}")
+        else:
+            logging.info(f"Storing DeFi metrics (type: {type(serializable_defi_data)})")
         
         metadata = {
             "timestamp": datetime.now().isoformat(),
