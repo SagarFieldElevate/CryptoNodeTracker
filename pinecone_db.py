@@ -158,12 +158,22 @@ def store_network_metrics(network_data, chain_id=None):
         else:
             logging.info(f"Storing network metrics (type: {type(serializable_network_data)})")
         
+        # Pinecone requires metadata values to be strings, numbers, booleans or lists of strings
+        # So we'll flatten and simplify our metadata structure
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "network_metrics",
-            "chain_id": str(chain_id) if chain_id else None,
-            "metrics": serializable_network_data
+            "chain_id": str(chain_id) if chain_id else "unknown"
         }
+        
+        # Add some key metrics as simple values
+        if isinstance(serializable_network_data, dict):
+            for key in ['avg_tx_count', 'tx_growth_rate', 'avg_gas_price']:
+                if key in serializable_network_data:
+                    metadata[key] = str(serializable_network_data.get(key, 0))
+        
+        # Store the full data as a JSON string
+        metadata["data_json"] = json.dumps(serializable_network_data)
         
         # Generate embedding
         embedding = generate_simple_embedding(network_data)
@@ -251,12 +261,21 @@ def store_defi_metrics(defi_data, chain_id=None):
         # Log what we're storing
         logging.info(f"Storing DeFi metrics with keys: {list(serializable_defi_data.keys())}")
         
+        # Pinecone requires metadata values to be strings, numbers, booleans or lists of strings
+        # So we'll flatten and simplify our metadata structure
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "defi_metrics",
-            "chain_id": str(chain_id) if chain_id else None,
-            "metrics": serializable_defi_data
+            "chain_id": str(chain_id) if chain_id else "unknown",
+            "total_activity": str(serializable_defi_data.get('total_activity', 0)),
+            # Convert protocol activity to a simpler format
+            "top_protocol": max(serializable_defi_data.get('protocol_activity', {}).items(), key=lambda x: x[1])[0] if serializable_defi_data.get('protocol_activity', {}) else "none",
+            # Number of transactions in history
+            "tx_count": str(len(serializable_defi_data.get('transaction_history', [])))
         }
+        
+        # Store the full data as a JSON string instead
+        metadata["data_json"] = json.dumps(serializable_defi_data)
         
         # Generate embedding
         embedding = generate_simple_embedding(defi_data)
@@ -303,12 +322,22 @@ def store_address_metrics(address_data, chain_id=None):
             else:
                 serializable_address_data[key] = value
         
+        # Pinecone requires metadata values to be strings, numbers, booleans or lists of strings
+        # So we'll flatten and simplify our metadata structure
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "address_metrics",
-            "chain_id": str(chain_id) if chain_id else None,
-            "metrics": serializable_address_data
+            "chain_id": str(chain_id) if chain_id else "unknown"
         }
+        
+        # Add some key metrics as simple values
+        if isinstance(serializable_address_data, dict):
+            for key in ['current_active_addresses', 'active_address_growth']:
+                if key in serializable_address_data:
+                    metadata[key] = str(serializable_address_data.get(key, 0))
+        
+        # Store the full data as a JSON string
+        metadata["data_json"] = json.dumps(serializable_address_data)
         
         # Generate embedding
         embedding = generate_simple_embedding(address_data)
@@ -355,13 +384,21 @@ def store_ai_insights(insights_data, query_context=None, chain_id=None):
             else:
                 serializable_insights_data[key] = value
         
+        # Pinecone requires metadata values to be strings, numbers, booleans or lists of strings
+        # So we'll flatten and simplify our metadata structure
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "ai_insights",
-            "chain_id": str(chain_id) if chain_id else None,
-            "query_context": query_context,
-            "insights": serializable_insights_data
+            "chain_id": str(chain_id) if chain_id else "unknown",
+            "query_context": str(query_context) if query_context else "none"
         }
+        
+        # Add a summary if available
+        if isinstance(serializable_insights_data, dict) and 'summary' in serializable_insights_data:
+            metadata["summary"] = str(serializable_insights_data.get('summary', ''))[:500]  # Limit length
+        
+        # Store the full data as a JSON string
+        metadata["data_json"] = json.dumps(serializable_insights_data)
         
         # Generate embedding
         embedding = generate_simple_embedding(insights_data)
@@ -408,13 +445,37 @@ def store_prediction_data(prediction_data, historical_context=None, chain_id=Non
             else:
                 serializable_prediction_data[key] = value
                 
+        # Pinecone requires metadata values to be strings, numbers, booleans or lists of strings
+        # So we'll flatten and simplify our metadata structure
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "predictions",
-            "chain_id": str(chain_id) if chain_id else None,
-            "historical_context": historical_context,
-            "predictions": serializable_prediction_data
+            "chain_id": str(chain_id) if chain_id else "unknown",
+            "historical_context": str(historical_context) if historical_context else "none"
         }
+        
+        # Add some key prediction metrics if available
+        if isinstance(serializable_prediction_data, dict):
+            # Extract confidence score if available
+            if 'confidence' in serializable_prediction_data:
+                conf_data = serializable_prediction_data.get('confidence', {})
+                if isinstance(conf_data, dict):
+                    avg_confidence = sum(conf_data.values()) / len(conf_data) if conf_data else 0
+                    metadata["avg_confidence"] = str(avg_confidence)
+            
+            # Extract trend direction if available
+            if 'trends' in serializable_prediction_data:
+                trend_data = serializable_prediction_data.get('trends', {})
+                if isinstance(trend_data, dict) and trend_data:
+                    # Get the most common trend direction
+                    trend_counts = {}
+                    for trend in trend_data.values():
+                        trend_counts[trend] = trend_counts.get(trend, 0) + 1
+                    main_trend = max(trend_counts.items(), key=lambda x: x[1])[0]
+                    metadata["main_trend"] = main_trend
+        
+        # Store the full data as a JSON string
+        metadata["data_json"] = json.dumps(serializable_prediction_data)
         
         # Generate embedding
         embedding = generate_simple_embedding(prediction_data)
