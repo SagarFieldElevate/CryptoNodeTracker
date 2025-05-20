@@ -136,6 +136,13 @@ if st.session_state.connected and st.session_state.w3:
                         # Get network metrics
                         metrics = get_network_metrics(st.session_state.w3, blocks_back)
                         
+                        # Store in Pinecone vector database
+                        chain_id = st.session_state.w3.eth.chain_id
+                        with st.spinner("Storing network metrics in vector database..."):
+                            record_id = store_network_metrics(metrics, chain_id)
+                            if record_id:
+                                st.success("Network metrics stored in vector database for future analysis")
+                        
                         # Display key metrics
                         col1, col2 = st.columns(2)
                         with col1:
@@ -247,6 +254,13 @@ if st.session_state.connected and st.session_state.w3:
                         # Get DeFi indicators
                         defi_data = get_defi_indicators(st.session_state.w3, blocks_back)
                         
+                        # Store in Pinecone vector database
+                        chain_id = st.session_state.w3.eth.chain_id
+                        with st.spinner("Storing DeFi metrics in vector database..."):
+                            record_id = store_defi_metrics(defi_data, chain_id)
+                            if record_id:
+                                st.success("DeFi metrics stored in vector database for future analysis")
+                        
                         # Display total activity
                         st.metric(
                             "Total DeFi Activity", 
@@ -337,6 +351,13 @@ if st.session_state.connected and st.session_state.w3:
                     try:
                         # Get address activity trends
                         address_data = get_address_activity_trends(st.session_state.w3, days)
+                        
+                        # Store in Pinecone vector database
+                        chain_id = st.session_state.w3.eth.chain_id
+                        with st.spinner("Storing address activity data in vector database..."):
+                            record_id = store_address_metrics(address_data, chain_id)
+                            if record_id:
+                                st.success("Address metrics stored in vector database for future analysis")
                         
                         # Display current active addresses
                         st.metric(
