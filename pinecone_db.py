@@ -94,11 +94,20 @@ def store_network_metrics(network_data, chain_id=None):
         record_id = str(uuid.uuid4())
         
         # Add timestamp and chain info
+        # Convert any pandas DataFrames to dict for JSON serialization
+        serializable_network_data = {}
+        for key, value in network_data.items():
+            if isinstance(value, pd.DataFrame):
+                # Convert any DataFrame to dict
+                serializable_network_data[key] = value.to_dict(orient='records')
+            else:
+                serializable_network_data[key] = value
+        
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "network_metrics",
             "chain_id": str(chain_id) if chain_id else None,
-            "metrics": network_data
+            "metrics": serializable_network_data
         }
         
         # Generate embedding
@@ -137,11 +146,14 @@ def store_defi_metrics(defi_data, chain_id=None):
         record_id = str(uuid.uuid4())
         
         # Add timestamp and chain info
-        # Convert pandas DataFrame to dict for JSON serialization
-        serializable_defi_data = defi_data.copy()
-        if 'transaction_history' in serializable_defi_data and isinstance(serializable_defi_data['transaction_history'], pd.DataFrame):
-            # Convert DataFrame to dict
-            serializable_defi_data['transaction_history'] = serializable_defi_data['transaction_history'].to_dict(orient='records')
+        # Deep copy and convert all pandas DataFrames to dict for JSON serialization
+        serializable_defi_data = {}
+        for key, value in defi_data.items():
+            if isinstance(value, pd.DataFrame):
+                # Convert any DataFrame to dict
+                serializable_defi_data[key] = value.to_dict(orient='records')
+            else:
+                serializable_defi_data[key] = value
         
         metadata = {
             "timestamp": datetime.now().isoformat(),
@@ -186,11 +198,20 @@ def store_address_metrics(address_data, chain_id=None):
         record_id = str(uuid.uuid4())
         
         # Add timestamp and chain info
+        # Convert any pandas DataFrames to dict for JSON serialization
+        serializable_address_data = {}
+        for key, value in address_data.items():
+            if isinstance(value, pd.DataFrame):
+                # Convert any DataFrame to dict
+                serializable_address_data[key] = value.to_dict(orient='records')
+            else:
+                serializable_address_data[key] = value
+        
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "address_metrics",
             "chain_id": str(chain_id) if chain_id else None,
-            "metrics": address_data
+            "metrics": serializable_address_data
         }
         
         # Generate embedding
@@ -229,12 +250,21 @@ def store_ai_insights(insights_data, query_context=None, chain_id=None):
         record_id = str(uuid.uuid4())
         
         # Add timestamp and chain info
+        # Convert any pandas DataFrames to dict for JSON serialization
+        serializable_insights_data = {}
+        for key, value in insights_data.items():
+            if isinstance(value, pd.DataFrame):
+                # Convert any DataFrame to dict
+                serializable_insights_data[key] = value.to_dict(orient='records')
+            else:
+                serializable_insights_data[key] = value
+        
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "ai_insights",
             "chain_id": str(chain_id) if chain_id else None,
             "query_context": query_context,
-            "insights": insights_data
+            "insights": serializable_insights_data
         }
         
         # Generate embedding
@@ -273,12 +303,21 @@ def store_prediction_data(prediction_data, historical_context=None, chain_id=Non
         record_id = str(uuid.uuid4())
         
         # Add timestamp and chain info
+        # Convert any pandas DataFrames to dict for JSON serialization
+        serializable_prediction_data = {}
+        for key, value in prediction_data.items():
+            if isinstance(value, pd.DataFrame):
+                # Convert any DataFrame to dict
+                serializable_prediction_data[key] = value.to_dict(orient='records')
+            else:
+                serializable_prediction_data[key] = value
+                
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "predictions",
             "chain_id": str(chain_id) if chain_id else None,
             "historical_context": historical_context,
-            "predictions": prediction_data
+            "predictions": serializable_prediction_data
         }
         
         # Generate embedding
