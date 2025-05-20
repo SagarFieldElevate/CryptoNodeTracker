@@ -22,49 +22,65 @@ def make_json_serializable(obj):
     Returns:
     - JSON serializable version of the object
     """
+    # Handle None type
+    if obj is None:
+        return None
+        
+    # Handle dictionaries by recursively processing values
     if isinstance(obj, dict):
         return {k: make_json_serializable(v) for k, v in obj.items()}
+        
+    # Handle lists by recursively processing items
     elif isinstance(obj, list):
         return [make_json_serializable(item) for item in obj]
+        
+    # Handle pandas DataFrames
     elif isinstance(obj, pd.DataFrame):
         try:
-            # Try to convert to dict first
-            dict_data = obj.to_dict(orient='records')
-            # Make all values in the dict serializable
-            return [make_json_serializable(record) for record in dict_data]
-        except:
-            # Fallback to string representation
-            return obj.to_string()
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, (pd.Timestamp, datetime)):
-        return obj.isoformat()
-    elif isinstance(obj, pd.Series):
-        try:
-            return make_json_serializable(obj.to_dict())
-        except:
-            return obj.to_string()
-    elif hasattr(obj, 'to_dict'):
-        # For any object with to_dict method (like some pandas objects)
-        try:
-            return make_json_serializable(obj.to_dict())
+            # Simple dict conversion for small dataframes
+            if len(obj) < 1000:
+                return obj.to_dict(orient='records')
+            # For large dataframes, return summary statistics
+            return {
+                "summary": obj.describe().to_dict(),
+                "shape": obj.shape,
+                "columns": list(obj.columns)
+            }
         except:
             return str(obj)
-    elif hasattr(obj, '__dict__'):
-        # For general objects with attributes
-        return make_json_serializable(obj.__dict__)
-    elif np.isscalar(obj) and np.isnan(obj):
-        # Handle NaN values
-        return None
-    elif pd.isna(obj):
-        # Handle pandas NA values
-        return None
-    else:
-        # Try direct conversion, if it fails convert to string
+            
+    # Handle numpy arrays
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+        
+    # Handle datetime objects
+    elif isinstance(obj, (pd.Timestamp, datetime)):
+        return obj.isoformat()
+        
+    # Handle pandas Series
+    elif isinstance(obj, pd.Series):
         try:
-            json.dumps(obj)
+            # Convert to regular Python dict
+            return obj.to_dict()
+        except:
+            return obj.to_list()
+            
+    # Handle float NaN values
+    elif isinstance(obj, float) and np.isnan(obj):
+        return None
+        
+    # Handle numpy types by converting to Python native types
+    elif hasattr(np, 'isscalar') and np.isscalar(obj) and hasattr(obj, 'dtype'):
+        # Convert numpy scalar to Python native type
+        return obj.item() if hasattr(obj, 'item') else float(obj)
+        
+    # Final fallback: try JSON serialization or convert to string
+    else:
+        try:
+            json.dumps(obj)  # Test if JSON serializable
             return obj
-        except (TypeError, OverflowError):
+        except:
+            # If all else fails, return string representation
             return str(obj)
 
 # Initialize Pinecone client with API key
