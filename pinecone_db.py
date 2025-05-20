@@ -7,6 +7,7 @@ import uuid
 import logging
 from datetime import datetime
 import numpy as np
+import pandas as pd
 from pinecone import Pinecone
 from sklearn.preprocessing import normalize
 
@@ -116,11 +117,17 @@ def store_defi_metrics(defi_data, chain_id=None):
         record_id = str(uuid.uuid4())
         
         # Add timestamp and chain info
+        # Convert pandas DataFrame to dict for JSON serialization
+        serializable_defi_data = defi_data.copy()
+        if 'transaction_history' in serializable_defi_data and isinstance(serializable_defi_data['transaction_history'], pd.DataFrame):
+            # Convert DataFrame to dict
+            serializable_defi_data['transaction_history'] = serializable_defi_data['transaction_history'].to_dict(orient='records')
+        
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "data_type": "defi_metrics",
             "chain_id": str(chain_id) if chain_id else None,
-            "metrics": defi_data
+            "metrics": serializable_defi_data
         }
         
         # Generate embedding
