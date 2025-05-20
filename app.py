@@ -119,7 +119,7 @@ if st.session_state.connected and st.session_state.w3:
         
         analysis_type = st.radio(
             "Select Analysis Type",
-            options=["Network Activity", "DeFi Activity", "Address Growth", "AI Insights", "Predictive Analytics", "Real-time Monitoring"]
+            options=["Network Activity", "DeFi Activity", "Address Growth", "AI Insights", "Predictive Analytics", "Real-time Monitoring", "Stored Analytics"]
         )
         
         if analysis_type == "Network Activity":
@@ -478,6 +478,18 @@ if st.session_state.connected and st.session_state.w3:
                         
                         insights_result = generate_blockchain_insights(blockchain_data, chain_id)
                         
+                        # Store AI insights in Pinecone vector database
+                        if 'error' not in insights_result:
+                            with st.spinner("Storing AI insights in vector database..."):
+                                query_context = {
+                                    "network_blocks": network_blocks,
+                                    "address_days": address_days,
+                                    "timestamp": datetime.datetime.now().isoformat()
+                                }
+                                record_id = store_ai_insights(insights_result, query_context, chain_id)
+                                if record_id:
+                                    st.success("AI insights stored in vector database for future reference")
+                        
                         if 'error' in insights_result:
                             st.error(insights_result['error'])
                             st.markdown(insights_result.get('message', ''))
@@ -573,6 +585,186 @@ if st.session_state.connected and st.session_state.w3:
                 - Past patterns may not predict future results
                 """)
                 
+        elif analysis_type == "Stored Analytics":
+            st.subheader("Stored Analytics Database")
+            
+            st.markdown("""
+            This section allows you to browse and search through all the blockchain analytics data 
+            that has been stored in the vector database. This includes network metrics, DeFi indicators,
+            address activity, AI insights, and prediction data.
+            """)
+            
+            # Select data type to view
+            data_type = st.selectbox(
+                "Select Analytics Type to View",
+                options=[
+                    "All Data",
+                    "Network Metrics",
+                    "DeFi Metrics",
+                    "Address Activity",
+                    "AI Insights",
+                    "Prediction Data"
+                ]
+            )
+            
+            # Map selection to data type
+            data_type_map = {
+                "All Data": None,
+                "Network Metrics": "network_metrics",
+                "DeFi Metrics": "defi_metrics",
+                "Address Activity": "address_metrics",
+                "AI Insights": "ai_insights",
+                "Prediction Data": "predictions"
+            }
+            
+            # Limit for records to retrieve
+            limit = st.slider("Maximum Records to Retrieve", 5, 50, 10)
+            
+            # Button to retrieve data
+            if st.button("Retrieve Stored Analytics"):
+                with st.spinner("Retrieving data from vector database..."):
+                    try:
+                        # Retrieve records of the selected type
+                        selected_type = data_type_map[data_type]
+                        records = retrieve_recent_records(selected_type, limit)
+                        
+                        if records:
+                            st.success(f"Successfully retrieved {len(records)} records from the vector database")
+                            
+                            # Display the records
+                            for i, record in enumerate(records):
+                                # Create an expander for each record
+                                with st.expander(f"Record {i+1}: {record.metadata.get('data_type', 'Unknown')} - {record.metadata.get('timestamp', 'Unknown date')}"):
+                                    # Display metadata
+                                    st.markdown("### Metadata")
+                                    st.write({
+                                        "Record ID": record.id,
+                                        "Data Type": record.metadata.get("data_type", "Unknown"),
+                                        "Timestamp": record.metadata.get("timestamp", "Unknown"),
+                                        "Chain ID": record.metadata.get("chain_id", "Unknown")
+                                    })
+                                    
+                                    # Display metrics based on data type
+                                    st.markdown("### Analytics Data")
+                                    
+                                    if record.metadata.get("data_type") == "network_metrics":
+                                        metrics = record.metadata.get("metrics", {})
+                                        if metrics:
+                                            col1, col2 = st.columns(2)
+                                            with col1:
+                                                st.metric("Avg. Transactions", f"{metrics.get('avg_tx_count', 0):.2f}")
+                                                st.metric("Tx Growth Rate", f"{metrics.get('tx_growth_rate', 0):.2f}%")
+                                            with col2:
+                                                st.metric("Avg. Gas Price", f"{metrics.get('avg_gas_price', 0):.2f} Gwei")
+                                                st.metric("Gas Utilization", f"{metrics.get('avg_gas_utilization', 0):.2f}%")
+                                    
+                                    elif record.metadata.get("data_type") == "defi_metrics":
+                                        metrics = record.metadata.get("metrics", {})
+                                        if metrics:
+                                            st.metric("Total DeFi Activity", f"{metrics.get('total_activity', 0)} transactions")
+                                            
+                                            # Display protocol activity if available
+                                            protocol_activity = metrics.get("protocol_activity", {})
+                                            if protocol_activity:
+                                                st.markdown("#### Protocol Activity")
+                                                for protocol, count in protocol_activity.items():
+                                                    st.metric(protocol, f"{count} transactions")
+                                    
+                                    elif record.metadata.get("data_type") == "address_metrics":
+                                        metrics = record.metadata.get("metrics", {})
+                                        if metrics:
+                                            st.metric("Active Addresses", f"{metrics.get('current_active_addresses', 0):,}")
+                                            st.metric("Address Growth", f"{metrics.get('active_address_growth', 0):.2f}%")
+                                    
+                                    elif record.metadata.get("data_type") == "ai_insights":
+                                        insights = record.metadata.get("insights", {})
+                                        query_context = record.metadata.get("query_context", {})
+                                        
+                                        if query_context:
+                                            st.markdown("#### Analysis Context")
+                                            st.write(query_context)
+                                        
+                                        if insights:
+                                            if "summary" in insights:
+                                                st.markdown(f"**Summary**: {insights['summary']}")
+                                            
+                                            if "market_trends" in insights:
+                                                st.markdown("**Market Trends**")
+                                                st.write(insights["market_trends"])
+                                            
+                                            if "recommendations" in insights:
+                                                st.markdown("**Recommendations**")
+                                                st.write(insights["recommendations"])
+                                    
+                                    elif record.metadata.get("data_type") == "predictions":
+                                        predictions = record.metadata.get("predictions", {})
+                                        context = record.metadata.get("historical_context", {})
+                                        
+                                        if context:
+                                            st.markdown("#### Prediction Context")
+                                            st.write(context)
+                                        
+                                        if predictions:
+                                            st.markdown("#### Prediction Results")
+                                            
+                                            # Display trends if available
+                                            if "trends" in predictions:
+                                                st.markdown("**Trends**")
+                                                st.write(predictions["trends"])
+                                            
+                                            # Display confidence scores if available
+                                            if "confidence" in predictions:
+                                                st.markdown("**Confidence Scores**")
+                                                st.write(predictions["confidence"])
+                            
+                            # Provide download option for all retrieved data
+                            try:
+                                # Convert to a plain JSON-serializable format
+                                download_data = []
+                                for record in records:
+                                    download_data.append({
+                                        "id": record.id,
+                                        "score": record.score,
+                                        "metadata": record.metadata
+                                    })
+                                
+                                # Create download button
+                                st.download_button(
+                                    label="Download All Retrieved Records (JSON)",
+                                    data=json.dumps(download_data, indent=2, default=str),
+                                    file_name="blockchain_analytics_records.json",
+                                    mime="application/json"
+                                )
+                            except Exception as e:
+                                st.error(f"Error preparing download: {str(e)}")
+                        else:
+                            st.info("No records found in the vector database for the selected type")
+                    
+                    except Exception as e:
+                        st.error(f"Error retrieving data from vector database: {str(e)}")
+            
+            # Documentation about stored analytics
+            with st.expander("About the Vector Database Storage"):
+                st.markdown("""
+                ### How It Works
+                All analytics generated by this dashboard are automatically stored in a Pinecone vector database, which allows for:
+                
+                * **Persistent Storage**: Your analytics results are saved even after you close the dashboard
+                * **Semantic Search**: Similar analytics results can be found based on vector similarity
+                * **Historical Analysis**: Track changes in blockchain metrics over time
+                * **Structured Format**: Data is stored with metadata for easy retrieval
+                
+                ### Data Types Stored
+                - **Network Metrics**: Transaction volumes, gas prices, and other network-wide indicators
+                - **DeFi Metrics**: Protocol activity, market concentration data, and DeFi transaction patterns
+                - **Address Activity**: Active address counts and growth rates over time
+                - **AI Insights**: Generated analysis and recommendations from the AI about blockchain trends
+                - **Prediction Data**: Forecasts of future blockchain metrics and their confidence scores
+                
+                ### Data Retention
+                Data stored in the vector database will be retained based on your Pinecone account settings. Free tier accounts typically have limits on the number of vectors that can be stored.
+                """)
+                
         elif analysis_type == "Predictive Analytics":
             st.subheader("Blockchain Trend Forecasting")
             
@@ -657,6 +849,20 @@ if st.session_state.connected and st.session_state.w3:
                         st.markdown("### Generating Forecasts")
                         
                         predictions = get_predictive_indicators(historical_data, days_to_predict)
+                        
+                        # Store prediction data in Pinecone vector database
+                        if 'error' not in predictions:
+                            with st.spinner("Storing prediction data in vector database..."):
+                                chain_id = st.session_state.w3.eth.chain_id
+                                historical_context = {
+                                    "days_analyzed": days_to_analyze,
+                                    "days_predicted": days_to_predict,
+                                    "metrics": prediction_metrics,
+                                    "timestamp": datetime.datetime.now().isoformat()
+                                }
+                                record_id = store_prediction_data(predictions, historical_context, chain_id)
+                                if record_id:
+                                    st.success("Prediction data stored in vector database for future reference")
                         
                         if 'error' in predictions:
                             st.error(predictions['error'])
