@@ -32,13 +32,14 @@ def get_index(pc, index_name="blockchain-analytics"):
             # Create a new index with the required server spec
             from pinecone import ServerlessSpec
             
+            # Use gcp-starter which is available on the free plan
             pc.create_index(
                 name=index_name,
                 dimension=1536,
                 metric="cosine",
                 spec=ServerlessSpec(
-                    cloud="aws",
-                    region="us-west-2"
+                    cloud="gcp", 
+                    region="us-central1"
                 )
             )
             logging.info(f"Successfully created index {index_name}")

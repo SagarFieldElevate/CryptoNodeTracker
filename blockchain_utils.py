@@ -500,9 +500,14 @@ def process_block_for_addresses(block_info):
         logging.debug(f"Error processing block {block_num}: {str(e)}")
         return (day_str, set())
 
-def get_address_activity_trends(w3, days=7):
+def get_address_activity_trends(w3, days=7, max_workers=500):
     """
     Analyze active addresses trends over time using parallel processing
+    
+    Parameters:
+    - w3: Web3 instance
+    - days: Number of days to analyze
+    - max_workers: Maximum number of parallel workers (default: 500)
     """
     try:
         logging.info(f"Starting address activity analysis for the last {days} days")
@@ -523,7 +528,7 @@ def get_address_activity_trends(w3, days=7):
         date_list = [(today - datetime.timedelta(days=d)).strftime('%Y-%m-%d') for d in range(days)]
         
         # Prepare parallel processing
-        max_workers = 2000  # Use 2000 simultaneous connections as requested
+        # Use the passed max_workers parameter instead of the hardcoded value
         logging.info(f"Using {max_workers} parallel workers")
         
         # Process all blocks with massive parallelism
