@@ -648,15 +648,35 @@ if st.session_state.connected and st.session_state.w3:
                                     st.markdown("### Analytics Data")
                                     
                                     if record.metadata.get("data_type") == "network_metrics":
-                                        metrics = record.metadata.get("metrics", {})
-                                        if metrics:
-                                            col1, col2 = st.columns(2)
-                                            with col1:
-                                                st.metric("Avg. Transactions", f"{metrics.get('avg_tx_count', 0):.2f}")
-                                                st.metric("Tx Growth Rate", f"{metrics.get('tx_growth_rate', 0):.2f}%")
-                                            with col2:
-                                                st.metric("Avg. Gas Price", f"{metrics.get('avg_gas_price', 0):.2f} Gwei")
-                                                st.metric("Gas Utilization", f"{metrics.get('avg_gas_utilization', 0):.2f}%")
+                                        # Check for the new data format (JSON string in data_json)
+                                        metrics = {}
+                                        if "data_json" in record.metadata:
+                                            try:
+                                                # Parse the JSON string into a dictionary
+                                                metrics = json.loads(record.metadata.get("data_json", "{}"))
+                                            except:
+                                                # Fallback to direct metrics if available
+                                                metrics = record.metadata.get("metrics", {})
+                                        else:
+                                            # Fallback to old format for backward compatibility
+                                            metrics = record.metadata.get("metrics", {})
+                                        
+                                        # Display metrics
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            # Get values from either parsed JSON or direct fields
+                                            avg_tx = float(record.metadata.get("avg_tx_count", 0)) if "avg_tx_count" in record.metadata else metrics.get("avg_tx_count", 0)
+                                            tx_growth = float(record.metadata.get("tx_growth_rate", 0)) if "tx_growth_rate" in record.metadata else metrics.get("tx_growth_rate", 0)
+                                            
+                                            st.metric("Avg. Transactions", f"{avg_tx:.2f}")
+                                            st.metric("Tx Growth Rate", f"{tx_growth:.2f}%")
+                                        with col2:
+                                            # Get values from either parsed JSON or direct fields
+                                            gas_price = float(record.metadata.get("avg_gas_price", 0)) if "avg_gas_price" in record.metadata else metrics.get("avg_gas_price", 0)
+                                            gas_util = metrics.get("avg_gas_utilization", 0)
+                                            
+                                            st.metric("Avg. Gas Price", f"{gas_price:.2f} Gwei")
+                                            st.metric("Gas Utilization", f"{gas_util:.2f}%")
                                     
                                     elif record.metadata.get("data_type") == "defi_metrics":
                                         metrics = record.metadata.get("metrics", {})

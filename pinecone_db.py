@@ -166,14 +166,55 @@ def store_network_metrics(network_data, chain_id=None):
             "chain_id": str(chain_id) if chain_id else "unknown"
         }
         
-        # Add some key metrics as simple values
+        # Add some key metrics as simple values, handling potential NaN values
         if isinstance(serializable_network_data, dict):
             for key in ['avg_tx_count', 'tx_growth_rate', 'avg_gas_price']:
                 if key in serializable_network_data:
-                    metadata[key] = str(serializable_network_data.get(key, 0))
+                    value = serializable_network_data.get(key, 0)
+                    # Check if value is NaN or None and handle it
+                    if value is None or (isinstance(value, float) and (np.isnan(value) if hasattr(np, 'isnan') else False)):
+                        metadata[key] = "0"
+                    else:
+                        metadata[key] = str(value)
         
-        # Store the full data as a JSON string
-        metadata["data_json"] = json.dumps(serializable_network_data)
+        # Clean any NaN values before JSON serialization to prevent errors
+        clean_data = {}
+        if isinstance(serializable_network_data, dict):
+            for k, v in serializable_network_data.items():
+                # Handle NaN values
+                if isinstance(v, float) and (np.isnan(v) if hasattr(np, 'isnan') else False):
+                    clean_data[k] = None
+                # Handle lists with potential NaN values
+                elif isinstance(v, list):
+                    clean_list = []
+                    for item in v:
+                        if isinstance(item, float) and (np.isnan(item) if hasattr(np, 'isnan') else False):
+                            clean_list.append(None)
+                        else:
+                            clean_list.append(item)
+                    clean_data[k] = clean_list
+                # Handle dictionaries with potential NaN values
+                elif isinstance(v, dict):
+                    clean_dict = {}
+                    for sub_k, sub_v in v.items():
+                        if isinstance(sub_v, float) and (np.isnan(sub_v) if hasattr(np, 'isnan') else False):
+                            clean_dict[sub_k] = None
+                        else:
+                            clean_dict[sub_k] = sub_v
+                    clean_data[k] = clean_dict
+                else:
+                    clean_data[k] = v
+        else:
+            clean_data = serializable_network_data
+        
+        # Try to serialize with special NaN handling
+        try:
+            # Store the full data as a JSON string
+            metadata["data_json"] = json.dumps(clean_data)
+        except Exception as e:
+            # If still fails, convert to a simple summary
+            logging.error(f"Error serializing data to JSON: {str(e)}")
+            metadata["data_json"] = json.dumps({"error": "Data could not be serialized", "keys": list(serializable_network_data.keys()) if isinstance(serializable_network_data, dict) else []})
         
         # Generate embedding
         embedding = generate_simple_embedding(network_data)
