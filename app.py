@@ -49,12 +49,9 @@ st.markdown("Connect to Coinbase Cloud nodes to analyze blockchain data")
 with st.sidebar:
     st.header("Connection Settings")
     
-    node_url = st.text_input(
-        "Coinbase Cloud Node URL", 
-        value=os.getenv("COINBASE_CLOUD_NODE", ""),
-        type="password",
-        help="Enter your Coinbase Cloud node endpoint URL"
-    )
+    # Always use the provided Coinbase Cloud node URL
+    node_url = "https://api.developer.coinbase.com/rpc/v1/base/15s8radjjHAJuKrZIzJ0WpsYQOFNg0Je"
+    st.success("✅ Using Coinbase Cloud Node URL for Base blockchain")
     
     if st.button("Connect to Node"):
         with st.spinner("Connecting to Ethereum node..."):
