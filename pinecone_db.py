@@ -27,19 +27,37 @@ def make_json_serializable(obj):
     elif isinstance(obj, list):
         return [make_json_serializable(item) for item in obj]
     elif isinstance(obj, pd.DataFrame):
-        return obj.to_dict(orient='records')
+        try:
+            # Try to convert to dict first
+            dict_data = obj.to_dict(orient='records')
+            # Make all values in the dict serializable
+            return [make_json_serializable(record) for record in dict_data]
+        except:
+            # Fallback to string representation
+            return obj.to_string()
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
     elif isinstance(obj, (pd.Timestamp, datetime)):
         return obj.isoformat()
+    elif isinstance(obj, pd.Series):
+        try:
+            return make_json_serializable(obj.to_dict())
+        except:
+            return obj.to_string()
     elif hasattr(obj, 'to_dict'):
         # For any object with to_dict method (like some pandas objects)
-        return make_json_serializable(obj.to_dict())
+        try:
+            return make_json_serializable(obj.to_dict())
+        except:
+            return str(obj)
     elif hasattr(obj, '__dict__'):
         # For general objects with attributes
         return make_json_serializable(obj.__dict__)
     elif np.isscalar(obj) and np.isnan(obj):
         # Handle NaN values
+        return None
+    elif pd.isna(obj):
+        # Handle pandas NA values
         return None
     else:
         # Try direct conversion, if it fails convert to string
@@ -182,14 +200,36 @@ def store_defi_metrics(defi_data, chain_id=None):
         # Generate a unique ID for this record
         record_id = str(uuid.uuid4())
         
-        # Convert all data to JSON serializable formats using our utility function
-        serializable_defi_data = make_json_serializable(defi_data)
+        # Create a manually JSON-serializable version of the data
+        serializable_defi_data = {}
         
-        # Log the keys we're going to store
-        if isinstance(serializable_defi_data, dict):
-            logging.info(f"Storing DeFi metrics with keys: {list(serializable_defi_data.keys())}")
-        else:
-            logging.info(f"Storing DeFi metrics (type: {type(serializable_defi_data)})")
+        # Handle each field separately to ensure JSON compatibility
+        if 'total_activity' in defi_data:
+            serializable_defi_data['total_activity'] = float(defi_data['total_activity'])
+            
+        if 'protocol_activity' in defi_data:
+            serializable_defi_data['protocol_activity'] = {
+                k: float(v) for k, v in defi_data['protocol_activity'].items()
+            }
+            
+        if 'market_shares' in defi_data:
+            serializable_defi_data['market_shares'] = {
+                k: float(v) for k, v in defi_data['market_shares'].items()
+            }
+            
+        if 'transaction_history' in defi_data:
+            # Handle the DataFrame by converting to a list of dicts
+            tx_history = defi_data['transaction_history']
+            if isinstance(tx_history, pd.DataFrame):
+                serializable_defi_data['transaction_history'] = tx_history.to_dict(orient='records')
+            elif isinstance(tx_history, list):
+                # If it's already a list (post-fix in blockchain_utils.py), use it directly
+                serializable_defi_data['transaction_history'] = tx_history
+            else:
+                serializable_defi_data['transaction_history'] = []
+                
+        # Log what we're storing
+        logging.info(f"Storing DeFi metrics with keys: {list(serializable_defi_data.keys())}")
         
         metadata = {
             "timestamp": datetime.now().isoformat(),
