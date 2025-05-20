@@ -432,11 +432,15 @@ def get_defi_indicators(w3, blocks_back=1000):
         
         logging.info(f"DeFi indicators analysis completed in {time.time() - start_time:.2f} seconds")
             
+        # Convert transaction history to a list of dictionaries instead of DataFrame
+        # This makes it directly JSON serializable
+        tx_history_records = transaction_history if transaction_history else []
+        
         return {
             'total_activity': total_activity,
             'protocol_activity': defi_data,
             'market_shares': market_shares,
-            'transaction_history': pd.DataFrame(transaction_history) if transaction_history else pd.DataFrame()
+            'transaction_history': tx_history_records
         }
     except Exception as e:
         logging.error(f"Error getting DeFi indicators: {str(e)}")
