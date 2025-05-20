@@ -23,36 +23,46 @@ def get_pinecone_client():
 def get_index(pc, index_name="blockchain-analytics"):
     """Get or create a Pinecone index"""
     try:
-        # List existing indexes
-        indexes = pc.list_indexes()
-        
-        # Check if our index already exists
-        if index_name not in indexes:
-            logging.info(f"Creating new Pinecone index: {index_name}")
+        # Try to directly get the index first, which will work if it exists
+        try:
+            index = pc.Index(index_name)
+            logging.info(f"Using existing index {index_name}")
+            return index
+        except Exception as index_error:
+            # If the index doesn't exist, we'll create it
+            logging.info(f"Index doesn't exist yet: {str(index_error)}")
             
             # Create a new index with the required server spec
             from pinecone import ServerlessSpec
             
-            # Use us-east-1 region which is available on the free plan
-            pc.create_index(
-                name=index_name,
-                dimension=1536,
-                metric="cosine",
-                spec=ServerlessSpec(
-                    cloud="aws", 
-                    region="us-east-1"
+            try:
+                # Use us-east-1 region which is available on the free plan
+                pc.create_index(
+                    name=index_name,
+                    dimension=1536,
+                    metric="cosine",
+                    spec=ServerlessSpec(
+                        cloud="aws", 
+                        region="us-east-1"
+                    )
                 )
-            )
-            logging.info(f"Successfully created index {index_name}")
-        else:
-            logging.info(f"Using existing index {index_name}")
-            
-        # Connect to the index
-        return pc.Index(index_name)
+                logging.info(f"Successfully created index {index_name}")
+                
+                # Now we can connect to the newly created index
+                return pc.Index(index_name)
+            except Exception as create_error:
+                # If we get a 409 conflict error, it means the index already exists
+                if "409" in str(create_error) or "already exists" in str(create_error):
+                    logging.info(f"Index creation conflict - index already exists")
+                    return pc.Index(index_name)
+                else:
+                    # If it's another error, re-raise it
+                    raise create_error
     
     except Exception as e:
         logging.error(f"Error creating/accessing Pinecone index: {str(e)}")
-        raise
+        # Just return None instead of raising, to allow graceful handling
+        return None
 
 def generate_simple_embedding(data_dict, dimension=1536):
     """
@@ -75,6 +85,11 @@ def store_network_metrics(network_data, chain_id=None):
         pc = get_pinecone_client()
         index = get_index(pc)
         
+        # Check if we got a valid index
+        if index is None:
+            logging.error("Could not access Pinecone index, skipping storage")
+            return None
+            
         # Generate a unique ID for this record
         record_id = str(uuid.uuid4())
         
@@ -113,6 +128,11 @@ def store_defi_metrics(defi_data, chain_id=None):
         pc = get_pinecone_client()
         index = get_index(pc)
         
+        # Check if we got a valid index
+        if index is None:
+            logging.error("Could not access Pinecone index, skipping storage")
+            return None
+            
         # Generate a unique ID for this record
         record_id = str(uuid.uuid4())
         
@@ -157,6 +177,11 @@ def store_address_metrics(address_data, chain_id=None):
         pc = get_pinecone_client()
         index = get_index(pc)
         
+        # Check if we got a valid index
+        if index is None:
+            logging.error("Could not access Pinecone index, skipping storage")
+            return None
+            
         # Generate a unique ID for this record
         record_id = str(uuid.uuid4())
         
