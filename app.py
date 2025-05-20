@@ -16,6 +16,14 @@ from blockchain_utils import (
 )
 from ai_insights import generate_blockchain_insights
 from predictive_analytics import get_predictive_indicators
+from pinecone_db import (
+    store_network_metrics,
+    store_defi_metrics,
+    store_address_metrics, 
+    store_ai_insights,
+    store_prediction_data,
+    retrieve_recent_records
+)
 # We no longer need these imports since we removed those sections
 # from token_data import TOKEN_ADDRESSES
 
