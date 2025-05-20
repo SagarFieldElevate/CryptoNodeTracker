@@ -8,6 +8,7 @@ dependencies = [
     "numpy>=2.2.6",
     "openai>=1.79.0",
     "pandas>=2.2.3",
+    "pinecone>=6.0.2",
     "plotly>=6.1.0",
     "scikit-learn>=1.6.1",
     "statsmodels>=0.14.4",
