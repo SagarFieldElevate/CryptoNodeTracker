@@ -27,19 +27,27 @@ def make_json_serializable(obj):
     elif isinstance(obj, list):
         return [make_json_serializable(item) for item in obj]
     elif isinstance(obj, pd.DataFrame):
-        return obj.to_dict(orient='records')
+        return obj.to_dict(orient='records') if not obj.empty else []
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
     elif isinstance(obj, (pd.Timestamp, datetime)):
         return obj.isoformat()
+    elif isinstance(obj, pd.Series):
+        return obj.to_dict()
     elif hasattr(obj, 'to_dict'):
         # For any object with to_dict method (like some pandas objects)
-        return make_json_serializable(obj.to_dict())
+        try:
+            return make_json_serializable(obj.to_dict())
+        except:
+            return str(obj)
     elif hasattr(obj, '__dict__'):
         # For general objects with attributes
         return make_json_serializable(obj.__dict__)
     elif np.isscalar(obj) and np.isnan(obj):
         # Handle NaN values
+        return None
+    elif pd.isna(obj):
+        # Handle pandas NA values
         return None
     else:
         # Try direct conversion, if it fails convert to string
